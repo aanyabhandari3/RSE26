@@ -13,5 +13,5 @@ Files in kann are for the kann library and have dependencies built in. Same for 
 
 ## Repositories
 
-KANN: https://github.com/attractivechaos/kann
-GKYLCAS: https://github.com/ammarhakim/gkylcas/tree/main/provable-algorithms/neural_networks
+1. KANN: https://github.com/attractivechaos/kann
+2. GKYLCAS: https://github.com/ammarhakim/gkylcas/tree/main/provable-algorithms/neural_networks
