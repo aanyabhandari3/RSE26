@@ -16,13 +16,60 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 
+# ── Function selection ────────────────────────────────────────────────────────
+def _to_c_float(expr):
+    """Convert math function names to C single-precision variants (sinf, expf …)."""
+    for src, dst in [
+        ('sinh','sinhf'), ('cosh','coshf'), ('tanh','tanhf'),
+        ('asin','asinf'), ('acos','acosf'), ('atan2','atan2f'), ('atan','atanf'),
+        ('sin','sinf'),   ('cos','cosf'),   ('tan','tanf'),
+        ('expm1','expm1f'), ('exp2','exp2f'), ('exp','expf'),
+        ('log10','log10f'), ('log2','log2f'), ('log1p','log1pf'), ('log','logf'),
+        ('sqrt','sqrtf'), ('cbrt','cbrtf'), ('pow','powf'),
+        ('fabs','fabsf'), ('abs','fabsf'),
+        ('ceil','ceilf'), ('floor','floorf'), ('round','roundf'),
+    ]:
+        expr = re.sub(rf'\b{src}\b(?=\s*\()', dst, expr)
+    expr = re.sub(r'\bpi\b', '(float)M_PI', expr, flags=re.IGNORECASE)
+    return expr
+
+def _ask_function():
+    """Prompt for a function expression; accept sys.argv[1] as shortcut."""
+    if len(sys.argv) > 1:
+        raw = ' '.join(sys.argv[1:]).strip()
+        c_expr = _to_c_float(raw)
+        print(f'Function: {raw}  →  C: {c_expr}')
+        return raw, c_expr
+    print('\nEnter the target function  u(x, t)  using variables x and t.')
+    print('Math functions auto-convert to C floats: sin→sinf, exp→expf, etc.')
+    print('Examples:')
+    print('  sin(x)*exp(-t)')
+    print('  cos(2*x)*exp(-t/2)')
+    print('  tanh(x)*(1 - t/3)')
+    print('  pow(x, 2)*exp(-t)')
+    print()
+    while True:
+        raw = input('u(x,t) = ').strip()
+        if raw:
+            c_expr = _to_c_float(raw)
+            print(f'→ C: {c_expr}\n')
+            return raw, c_expr
+        print('  Please enter a function expression.')
+
+_fn_raw, _fn_c = _ask_function()
+FN_LABEL        = _fn_raw
+FN_COMPILE_FLAG = [f'-DTARGET_FN(x,t)=({_fn_c})']
+FN_ARG          = re.sub(r'[^\w]', '_', _fn_raw)[:30].strip('_') or 'custom'
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ── Models ───────────────────────────────────────────────────────────────────
 MODELS = {
-    'MLP (dense+tanh)': 'simple_mlp_ab.c',
-    'GRU':              'simple_rnn_ab.c',
+    'MLP':         'simple_mlp_ab.c',
+    'GRU':         'simple_rnn_ab.c',
+    'Transformer': 'simple_transformer_ab.c',
 }
 SHARED = ['kautodiff.c', 'kann.c']
-COLORS = ['steelblue', 'coral']
+COLORS = ['steelblue', 'coral', 'mediumseagreen']
 
 # ── Sweeps ───────────────────────────────────────────────────────────────────
 # For each sweep, 'flags' returns the -D flags to pass for a given value.
@@ -54,7 +101,7 @@ MSE_RE = re.compile(r'Validation MSE:\s*([\d.eE+\-]+)')
 def run_one(src, extra_flags, tag):
     """Compile src with extra_flags, run, return MSE float."""
     binary = f'./sweep_tmp_{tag}'
-    cmd = ['gcc', '-Wno-macro-redefined'] + extra_flags + [src] + SHARED + ['-lm', '-o', binary]
+    cmd = ['gcc', '-Wno-macro-redefined'] + FN_COMPILE_FLAG + extra_flags + [src] + SHARED + ['-lm', '-o', binary]
     cp = subprocess.run(cmd, capture_output=True, text=True)
     if cp.returncode != 0:
         print(f'\nCompile error ({tag}):\n{cp.stderr}')
@@ -87,17 +134,18 @@ for sweep in SWEEPS:
 # ── Plot ─────────────────────────────────────────────────────────────────────
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 fig.suptitle(
-    'MLP vs GRU — Validation MSE\n'
-    'u(x,t) = tanh(x)·exp(−t)  |  defaults: NX=NT=50, WIDTH=256, DEPTH=1, LR=0.001, epochs=50',
+    f'MLP vs GRU vs Transformer — Validation MSE\n'
+    f'u(x,t) = {FN_LABEL}  |  defaults: NX=NT=50, WIDTH=256, DEPTH=1, LR=0.001, epochs=50',
     fontsize=12
 )
 
-bw = 0.35
+bw = 0.25   # narrower so 3 bars fit side by side without overlap
 labels = list(MODELS.keys())
+n_models = len(labels)
 
 for ax, sweep, sweep_results in zip(axes, SWEEPS, all_results):
     x = np.arange(len(sweep['values']))
-    offsets = [-bw/2, bw/2]
+    offsets = np.linspace(-(n_models - 1) * bw / 2, (n_models - 1) * bw / 2, n_models)
 
     for label, color, offset in zip(labels, COLORS, offsets):
         mse_vals = sweep_results[label]
@@ -120,7 +168,7 @@ for ax, sweep, sweep_results in zip(axes, SWEEPS, all_results):
     ax.legend(fontsize=9)
 
 plt.tight_layout()
-out = 'mlp_vs_gru_sweep_tanh.png'
+out = f'sweep_width_{FN_ARG}.png'
 plt.savefig(out, dpi=150)
 print(f'\nSaved → {out}')
 plt.show()

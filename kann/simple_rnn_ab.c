@@ -30,6 +30,36 @@
 #define DEPTH 1
 #endif
 
+/* =====================================================================
+   VARIATION 4: Target function
+   Pass any C expression at compile time:
+       -DTARGET_FN(x,t)=<expr>
+   Python scripts convert math notation (sin, exp, ...) to C float
+   functions (sinf, expf, ...) automatically.
+   Convenience shortcuts still work:
+       -DFUNC_SIN   → sinf(x)*expf(-t)
+       -DFUNC_COS   → cosf(x)*expf(-t)
+       -DFUNC_TANH  → tanhf(x)*expf(-t)
+   Default (no flag): cosf(x)*expf(-t)
+   ===================================================================== */
+#if defined(FUNC_SIN)
+  #define TARGET_FN(x, t) (sinf(x) * expf(-(t)))
+  #define FN_LABEL "sin(x)*exp(-t)"
+#elif defined(FUNC_COS)
+  #define TARGET_FN(x, t) (cosf(x) * expf(-(t)))
+  #define FN_LABEL "cos(x)*exp(-t)"
+#elif defined(FUNC_TANH)
+  #define TARGET_FN(x, t) (tanhf(x) * expf(-(t)))
+  #define FN_LABEL "tanh(x)*exp(-t)"
+#endif
+/* Custom expression from -DTARGET_FN(x,t)=..., or fallback default */
+#ifndef TARGET_FN
+#define TARGET_FN(x, t) (cosf(x) * expf(-(t)))
+#endif
+#ifndef FN_LABEL
+#define FN_LABEL "custom"
+#endif
+
 int main(int argc, char **argv){
 
     int n = NX * NT;
@@ -45,7 +75,7 @@ int main(int argc, char **argv){
             float t = (float)(j * 2.0 / (NT - 1));
             input[k][0]  = x;
             input[k][1]  = t;
-            output[k][0] = cosf(x) * expf(-t);
+            output[k][0] = TARGET_FN(x, t);
             k++;
         }
     }
@@ -68,7 +98,7 @@ int main(int argc, char **argv){
         for (int j = 0; j <= 4; j++) {
             float x = (float)(i * 2.0 * M_PI / 4.0);
             float t = (float)(j * 3.0 / 4.0);
-            float exact = cosf(x) * expf(-t);
+            float exact = TARGET_FN(x, t);
             float xv[2] = {x, t};
             const float *y = kann_apply1(ann, xv);
             printf("%.4f\t\t%.4f\t\t%.6f\t%.6f\n", x, t, exact, y[0]);
@@ -78,23 +108,23 @@ int main(int argc, char **argv){
 
     float val_cost = kann_cost_fnn1(ann, n, input, output);
     printf("Validation MSE: %.6f\n", val_cost);
-    printf("(NX=%d, NT=%d, WIDTH=%d, DEPTH=%d)\n", NX, NT, WIDTH, DEPTH);
+    printf("(NX=%d, NT=%d, WIDTH=%d, DEPTH=%d, FN=%s)\n", NX, NT, WIDTH, DEPTH, FN_LABEL);
 
     /* Error norms at each time slice t in [0, 3.0]
        t > 2.0 is outside the training range — tests temporal generalization.
        L2   = sqrt( dx * sum(err^2) )   continuous spatial L2 norm
        LINF = max_x |err|               worst-case spatial error             */
-
+       
     int n_t_eval = 25, n_x_eval = 100;
     float dx = (float)(2.0 * M_PI / (n_x_eval - 1));
-    
+
     printf("L2NORM");
     for (int jt = 0; jt <= n_t_eval; jt++) {
         float t = (float)(jt * 3.0 / n_t_eval);
         float l2 = 0.0f;
         for (int ix = 0; ix < n_x_eval; ix++) {
             float x = (float)(ix * 2.0 * M_PI / (n_x_eval - 1));
-            float exact = cosf(x) * expf(-t);
+            float exact = TARGET_FN(x, t);
             float xv[2] = {x, t};
             const float *y = kann_apply1(ann, xv);
             float err = y[0] - exact;
@@ -110,7 +140,7 @@ int main(int argc, char **argv){
         float linf = 0.0f;
         for (int ix = 0; ix < n_x_eval; ix++) {
             float x = (float)(ix * 2.0 * M_PI / (n_x_eval - 1));
-            float exact = cosf(x) * expf(-t);
+            float exact = TARGET_FN(x, t);
             float xv[2] = {x, t};
             const float *y = kann_apply1(ann, xv);
             float err = fabsf(y[0] - exact);

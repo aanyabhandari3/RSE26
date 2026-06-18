@@ -20,9 +20,56 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
+# ── Function selection ────────────────────────────────────────────────────────
+def _to_c_float(expr):
+    """Convert math function names to C single-precision variants (sinf, expf …)."""
+    for src, dst in [
+        ('sinh','sinhf'), ('cosh','coshf'), ('tanh','tanhf'),
+        ('asin','asinf'), ('acos','acosf'), ('atan2','atan2f'), ('atan','atanf'),
+        ('sin','sinf'),   ('cos','cosf'),   ('tan','tanf'),
+        ('expm1','expm1f'), ('exp2','exp2f'), ('exp','expf'),
+        ('log10','log10f'), ('log2','log2f'), ('log1p','log1pf'), ('log','logf'),
+        ('sqrt','sqrtf'), ('cbrt','cbrtf'), ('pow','powf'),
+        ('fabs','fabsf'), ('abs','fabsf'),
+        ('ceil','ceilf'), ('floor','floorf'), ('round','roundf'),
+    ]:
+        expr = re.sub(rf'\b{src}\b(?=\s*\()', dst, expr)
+    expr = re.sub(r'\bpi\b', '(float)M_PI', expr, flags=re.IGNORECASE)
+    return expr
+
+def _ask_function():
+    """Prompt for a function expression; accept sys.argv[1] as shortcut."""
+    if len(sys.argv) > 1:
+        raw = ' '.join(sys.argv[1:]).strip()
+        c_expr = _to_c_float(raw)
+        print(f'Function: {raw}  →  C: {c_expr}')
+        return raw, c_expr
+    print('\nEnter the target function  u(x, t)  using variables x and t.')
+    print('Math functions auto-convert to C floats: sin→sinf, exp→expf, etc.')
+    print('Examples:')
+    print('  sin(x)*exp(-t)')
+    print('  cos(2*x)*exp(-t/2)')
+    print('  tanh(x)*(1 - t/3)')
+    print('  pow(x, 2)*exp(-t)')
+    print()
+    while True:
+        raw = input('u(x,t) = ').strip()
+        if raw:
+            c_expr = _to_c_float(raw)
+            print(f'→ C: {c_expr}\n')
+            return raw, c_expr
+        print('  Please enter a function expression.')
+
+_fn_raw, _fn_c = _ask_function()
+FN_LABEL      = _fn_raw
+COMPILE_FLAGS = [f'-DTARGET_FN(x,t)=({_fn_c})']
+FN_ARG        = re.sub(r'[^\w]', '_', _fn_raw)[:30].strip('_') or 'custom'
+# ─────────────────────────────────────────────────────────────────────────────
+
 MODELS = {
-    'MLP (dense+cos)': ('simple_mlp_ab.c', 'steelblue'),
-    'GRU':              ('simple_rnn_ab.c',  'coral'),
+    'MLP':         ('simple_mlp_ab.c',          'steelblue'),
+    'GRU':         ('simple_rnn_ab.c',           'coral'),
+    'Transformer': ('simple_transformer_ab.c',   'mediumseagreen'),
 }
 SHARED   = ['kautodiff.c', 'kann.c']
 N_T_EVAL = 25
@@ -40,7 +87,7 @@ for label, (src, color) in MODELS.items():
     binary = f'./norm_tmp_{label.split()[0].lower()}'
     print(f'Compiling {label} ...', flush=True)
     cp = subprocess.run(
-        ['gcc', src] + SHARED + ['-lm', '-o', binary],
+        ['gcc'] + COMPILE_FLAGS + [src] + SHARED + ['-lm', '-o', binary],
         capture_output=True, text=True
     )
     if cp.returncode != 0:
@@ -72,8 +119,8 @@ t_vals = np.linspace(0, T_MAX, N_T_EVAL + 1)
 
 fig, (ax_l2, ax_linf) = plt.subplots(1, 2, figsize=(13, 5))
 fig.suptitle(
-    'MLP vs GRU — Spatial Error Norms over Time\n'
-    'u(x,t) = cos(x)·exp(−t)  |  trained on t ∈ [0, 2],  evaluated on t ∈ [0, 3]',
+    f'MLP vs GRU vs Transformer — Spatial Error Norms over Time\n'
+    f'u(x,t) = {FN_LABEL}  |  trained on t ∈ [0, 2],  evaluated on t ∈ [0, 3]',
     fontsize=12
 )
 
@@ -99,7 +146,7 @@ for ax, norm_key, ylabel, title in [
     ax.legend(fontsize=9)
 
 plt.tight_layout()
-out = 'error_norms_cos.png'
+out = f'error_norms_{FN_ARG}.png'
 plt.savefig(out, dpi=150)
 print(f'\nSaved → {out}')
 plt.show()

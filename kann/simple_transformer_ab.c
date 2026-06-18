@@ -39,13 +39,20 @@
    ===================================================================== */
 #if defined(FUNC_SIN)
   #define TARGET_FN(x, t) (sinf(x) * expf(-(t)))
-  #define FN_LABEL "sin"
+  #define FN_LABEL "sin(x)*exp(-t)"
+#elif defined(FUNC_COS)
+  #define TARGET_FN(x, t) (cosf(x) * expf(-(t)))
+  #define FN_LABEL "cos(x)*exp(-t)"
 #elif defined(FUNC_TANH)
   #define TARGET_FN(x, t) (tanhf(x) * expf(-(t)))
-  #define FN_LABEL "tanh"
-#else
-  #define TARGET_FN(x, t) (cosf(x) * expf(-(t)))
-  #define FN_LABEL "cos"
+  #define FN_LABEL "tanh(x)*exp(-t)"
+#endif
+/* Custom expression from -DTARGET_FN(x,t)=..., or fallback default */
+#ifndef TARGET_FN
+#define TARGET_FN(x, t) (cosf(x) * expf(-(t)))
+#endif
+#ifndef FN_LABEL
+#define FN_LABEL "custom"
 #endif
 
 /* Feedforward sublayer inner dimension — standard transformer uses 2-4x d_model */
