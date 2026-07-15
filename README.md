@@ -4,11 +4,9 @@ This project is focusing on extending the MLP structure in Beacons to Transforme
 Files in kann are for the kann library and have dependencies built in. Same for all other folders.
 
 ## Currently working on....
-- Adding transformer.c to kann
-- rollout divergence updated to work for transformer.c
-- updating sweep to compare transformer.c with MLP and RNN
-- adding L2 and L-inf error for MLP and RNN comparison (expand to transformer later)
-- Adding linear_advection.rkt to gkylcas built for RNN. Includes code generation files.
+- changing hyperparameters for transformer generated files to test on linear advection
+- looking at empirically bounded vs. analytically bounded formulas to test architectures
+- trying to expand testing to non-linear burgers
 - lit review for approximation theory for RNN and inherently transformers
 
 ## Repositories
